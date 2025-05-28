@@ -73,6 +73,7 @@ void setup() {
   
   // 3. CONFIGURARE INTRERUPERI
   // intreruperea pe pinul ECHO pentru detectie rapida
+  // creez o intrerupere pe echo pin si execut functia echoInterrupt
   attachInterrupt(digitalPinToInterrupt(ECHO_PIN), echoInterrupt, CHANGE);
   
 
