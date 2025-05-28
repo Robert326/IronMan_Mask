@@ -3,40 +3,40 @@
 #include <DFRobotDFPlayerMini.h>
 
 // =========================
-// NOȚIUNI INTEGRATE:
+// notiuni integrate
 // 1. GPIO - pentru senzorul ultrasonic
 // 2. PWM - pentru controlul servomotoarelor
-// 3. Întreruperi - pentru detecție eficientă
+// 3. Întreruperi - pentru detectie eficienta
 // =========================
 
-// Definirea pinilor pentru senzorul ultrasonic HC-SR04
+// pinii HC-SR04
 #define TRIG_PIN 2
 #define ECHO_PIN 3
 
-// Definirea pinilor pentru servomotoare (PWM)
+// servomotoare (PWM)
 #define SERVO1_PIN 4
 #define SERVO2_PIN 5
 
-// Definirea pinilor pentru DFPlayer
+// DFPlayer
 #define DFPLAYER_RX 6
 #define DFPLAYER_TX 7
 
-// Crearea obiectelor
+// obiectele
 Servo servo1;
 Servo servo2;
 SoftwareSerial dfPlayerSerial(DFPLAYER_TX, DFPLAYER_RX);
 DFRobotDFPlayerMini dfPlayer;
 
-// Variabile pentru distanță și stare
+// Variabile pentru distanta si stare
 volatile bool proximityDetected = false;
 volatile unsigned long lastInterruptTime = 0;
 float distance = 0;
 bool isClose = false;
 bool lastState = false;
 
-// Variabile pentru timeout măsurare distanță
+// Variabile pentru timeout masurare distanta
 unsigned long lastMeasurementTime = 0;
-const unsigned long MEASUREMENT_INTERVAL = 1000; // 5 secunde în milisecunde
+const unsigned long MEASUREMENT_INTERVAL = 1000; // 1 secunda în milisecunde
 
 // Variabile pentru controlul vitezei servomotoarelor
 int currentAngle1 = 0;  // Poziția curentă servo1
@@ -53,15 +53,13 @@ const unsigned long DEBOUNCE_TIME = 200; // 200ms pentru debounce
 void setup() {
   Serial.begin(9600);
   
-  // =========================
+  
   // 1. CONFIGURARE GPIO
-  // =========================
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   
-  // =========================
+
   // 2. CONFIGURARE PWM (Servomotoare)
-  // =========================
   servo1.attach(SERVO1_PIN);
   servo2.attach(SERVO2_PIN);
   
@@ -73,92 +71,87 @@ void setup() {
   targetAngle1 = 0;
   targetAngle2 = 0;
   
-  // =========================
-  // 3. CONFIGURARE ÎNTRERUPERI
-  // =========================
-  // Configurăm întreruperea pe pinul ECHO pentru detecție rapidă
+  // 3. CONFIGURARE INTRERUPERI
+  // intreruperea pe pinul ECHO pentru detectie rapida
   attachInterrupt(digitalPinToInterrupt(ECHO_PIN), echoInterrupt, CHANGE);
   
-  // =========================
+
   // CONFIGURARE DFPLAYER
-  // =========================
   dfPlayerSerial.begin(9600);
   
-  Serial.println("Inițializare DFPlayer...");
+  Serial.println("Initializare DFPlayer...");
   if (!dfPlayer.begin(dfPlayerSerial)) {
-    Serial.println("Eroare la inițializarea DFPlayer!");
-    Serial.println("Verifică conexiunile și cardul SD!");
+    Serial.println("Eroare la initializarea DFPlayer!");
+    Serial.println("Verifica conexiunile sau cardul SD!");
     while(true) {
       delay(0);
     }
   }
-  Serial.println("DFPlayer inițializat cu succes!");
+  Serial.println("DFPlayer initializat cu succes!");
   
   // Configurare volum (0-30)
   dfPlayer.volume(20);
   
-  Serial.println("Sistem inițializat!");
-  Serial.println("Apropie-te la mai puțin de 30cm pentru a activa...");
+  Serial.println("Sistem initializat!");
+  Serial.println("Apropie-te la mai putin de 30cm pentru a activa...");
   
   delay(1000);
 }
 
 void loop() {
-  // Măsurăm distanța doar la fiecare 5 secunde
+  // masor doar la fiecare secunda
   unsigned long currentTime = millis();
   if (currentTime - lastMeasurementTime >= MEASUREMENT_INTERVAL) {
     distance = measureDistance();
     lastMeasurementTime = currentTime;
     
-    Serial.print("Măsurare nouă - Distanța: ");
+    Serial.print("masurare noua - distanta: ");
     Serial.print(distance);
     Serial.println(" cm");
     
-    // Verificăm schimbarea stării
+    // verific starea
     bool currentState = (distance < THRESHOLD_DISTANCE && distance > 0);
     
     if (currentState != lastState) {
       if (currentState) {
-        // Obiect detectat aproape
+        //obiect aproape
         activateProximityMode();
       } else {
-        // Obiectul s-a îndepărtat
+        // obiectul e departe
         deactivateProximityMode();
       }
       lastState = currentState;
     }
   }
   
-  // Actualizăm poziția servomotoarelor (mișcare lentă)
+  // actualizez servo-urile
   updateServoPositions();
   
   // Afișare informații pentru debugging (mai rar)
   static unsigned long lastDebugTime = 0;
   if (currentTime - lastDebugTime >= 2000) { // La fiecare 2 secunde
-    Serial.print("Status - Ultima distanță: ");
+    Serial.print("status - Ultima distanta: ");
     Serial.print(distance);
     Serial.print(" cm | Stare: ");
     Serial.print(lastState ? "APROAPE" : "DEPARTE");
     Serial.print(" | Servo1: ");
     Serial.print(currentAngle1);
-    Serial.print("° | Servo2: ");
+    Serial.print(" | Servo2: ");
     Serial.print(currentAngle2);
-    Serial.print("° | Timp până la următoarea măsurare: ");
+    Serial.print(" | Timp pana la urmatoarea masurare: ");
     Serial.print((MEASUREMENT_INTERVAL - (currentTime - lastMeasurementTime)) / 1000);
     Serial.println("s");
     lastDebugTime = currentTime;
   }
   
-  delay(20); // Delay mai mic pentru mișcare mai fluidă
+  delay(20); // delay mai  mic sa se miste mai fluid
 }
 
-// =========================
-// FUNCȚII PENTRU MIȘCARE LENTĂ SERVOMOTOARE
-// =========================
+// functii servomotoare
 void updateServoPositions() {
   bool moved = false;
   
-  // Actualizăm servo1
+  // servo1
   if (currentAngle1 != targetAngle1) {
     if (currentAngle1 < targetAngle1) {
       currentAngle1 += min(SERVO_SPEED, targetAngle1 - currentAngle1);
@@ -169,7 +162,7 @@ void updateServoPositions() {
     moved = true;
   }
   
-  // Actualizăm servo2
+  // servo2
   if (currentAngle2 != targetAngle2) {
     if (currentAngle2 < targetAngle2) {
       currentAngle2 += min(SERVO_SPEED, targetAngle2 - currentAngle2);
@@ -180,30 +173,30 @@ void updateServoPositions() {
     moved = true;
   }
   
-  // Dacă s-a mișcat cel puțin un servo, așteptăm
+  // daca s a miscat vreun servo astept
   if (moved) {
     delay(SERVO_DELAY);
   }
 }
 
 void moveServosToSlow(int angle1, int angle2) {
-  Serial.print("Setăm servomotoarele la: ");
+  Serial.print("setez servomotoarele la: ");
   Serial.print(angle1);
-  Serial.print("° și ");
+  Serial.print(" si ");
   Serial.print(angle2);
-  Serial.println("°");
+  Serial.println(" ");
   
-  // Setăm pozițiile țintă
+  // setez pozitiile tinta
   targetAngle1 = constrain(angle1, 0, 180);
   targetAngle2 = constrain(angle2, 0, 180);
 }
 
-// Funcție pentru a mișca ambele servomotoare la același unghi
+// functie sa mut servomotoarele la acelasi unghi
 void moveServosToSlow(int angle) {
   moveServosToSlow(angle, angle);
 }
 
-// Funcție pentru a aștepta ca servomotoarele să ajungă la poziție
+// functie sa astept sa ajunga la acelasi unghi
 void waitForServos() {
   while (currentAngle1 != targetAngle1 || currentAngle2 != targetAngle2) {
     updateServoPositions();
@@ -211,9 +204,7 @@ void waitForServos() {
   }
 }
 
-// =========================
-// FUNCȚIE ÎNTRERUPERE
-// =========================
+// functia de intrerupere
 void echoInterrupt() {
   // Debounce pentru întrerupere
   unsigned long currentTime = millis();
@@ -222,34 +213,30 @@ void echoInterrupt() {
   }
   lastInterruptTime = currentTime;
   
-  // Setăm flag-ul pentru detecție rapidă
+  // Setez flag-ul pt intrerupere
   proximityDetected = true;
 }
 
-// =========================
-// FUNCȚII GPIO - MĂSURAREA DISTANȚEI
-// =========================
+//functii gpio pt masurarea distantei
 float measureDistance() {
-  // Trimitem puls trigger
+  // trimit puls trigger
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
   
-  // Măsurăm durata pulsului echo
+  // masor durata pulsului echo
   long duration = pulseIn(ECHO_PIN, HIGH, 30000); // Timeout 30ms
   
-  // Calculăm distanța în cm
+  // calculez distanta in cm
   float distance = (duration * 0.034) / 2;
   
-  // Returnăm 0 dacă nu am primit răspuns valid
+  // returnez 0 daca nu am un raspuns valid
   return (duration == 0) ? 0 : distance;
 }
 
-// =========================
-// FUNCȚII PWM - CONTROLUL SERVOMOTOARELOR (ACTUALIZATE)
-// =========================
+// functii pwm
 void activateProximityMode() {
   Serial.println("ACTIVARE: Obiect detectat aproape!");
   
@@ -274,25 +261,23 @@ void deactivateProximityMode() {
   Serial.println("Redare: 002.mp3");
 }
 
-// =========================
-// FUNCȚII UTILITARE
-// =========================
+
 void printSystemInfo() {
   Serial.println("=========================");
-  Serial.println("INFORMAȚII SISTEM:");
+  Serial.println("INFORMATII SISTEM:");
   Serial.println("- Senzor ultrasonic: Pin 2 (TRIG), Pin 3 (ECHO)");
   Serial.println("- Servomotor 1: Pin 4 (PWM)");
   Serial.println("- Servomotor 2: Pin 5 (PWM)");
   Serial.println("- DFPlayer: Pin 6 (RX), Pin 7 (TX)");
-  Serial.print("- Prag detecție: ");
+  Serial.print("- Prag detectie: ");
   Serial.print(THRESHOLD_DISTANCE);
   Serial.println(" cm");
-  Serial.print("- Interval măsurare: ");
+  Serial.print("- Interval masurare: ");
   Serial.print(MEASUREMENT_INTERVAL / 1000);
   Serial.println(" secunde");
   Serial.print("- Viteza servo: ");
   Serial.print(SERVO_SPEED);
-  Serial.println("°/pas");
+  Serial.println(" /pas");
   Serial.print("- Delay servo: ");
   Serial.print(SERVO_DELAY);
   Serial.println("ms");
