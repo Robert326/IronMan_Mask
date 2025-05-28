@@ -34,6 +34,18 @@ float distance = 0;
 bool isClose = false;
 bool lastState = false;
 
+// Variabile pentru timeout măsurare distanță
+unsigned long lastMeasurementTime = 0;
+const unsigned long MEASUREMENT_INTERVAL = 1000; // 5 secunde în milisecunde
+
+// Variabile pentru controlul vitezei servomotoarelor
+int currentAngle1 = 0;  // Poziția curentă servo1
+int currentAngle2 = 0;  // Poziția curentă servo2
+int targetAngle1 = 0;   // Poziția țintă servo1
+int targetAngle2 = 0;   // Poziția țintă servo2
+const int SERVO_SPEED = 2;      // Viteza mișcării (grade pe pas)
+const int SERVO_DELAY = 15;     // Delay între pași (ms)
+
 // Constante
 const float THRESHOLD_DISTANCE = 30.0; // 30 cm
 const unsigned long DEBOUNCE_TIME = 200; // 200ms pentru debounce
@@ -56,6 +68,10 @@ void setup() {
   // Poziția inițială a servomotoarelor
   servo1.write(0);
   servo2.write(0);
+  currentAngle1 = 0;
+  currentAngle2 = 0;
+  targetAngle1 = 0;
+  targetAngle2 = 0;
   
   // =========================
   // 3. CONFIGURARE ÎNTRERUPERI
@@ -88,32 +104,111 @@ void setup() {
 }
 
 void loop() {
-  // Măsurăm distanța periodic
-  distance = measureDistance();
-  
-  // Verificăm schimbarea stării
-  bool currentState = (distance < THRESHOLD_DISTANCE && distance > 0);
-  
-  if (currentState != lastState) {
-    if (currentState) {
-      // Obiect detectat aproape
-      activateProximityMode();
-    } else {
-      // Obiectul s-a îndepărtat
-      deactivateProximityMode();
+  // Măsurăm distanța doar la fiecare 5 secunde
+  unsigned long currentTime = millis();
+  if (currentTime - lastMeasurementTime >= MEASUREMENT_INTERVAL) {
+    distance = measureDistance();
+    lastMeasurementTime = currentTime;
+    
+    Serial.print("Măsurare nouă - Distanța: ");
+    Serial.print(distance);
+    Serial.println(" cm");
+    
+    // Verificăm schimbarea stării
+    bool currentState = (distance < THRESHOLD_DISTANCE && distance > 0);
+    
+    if (currentState != lastState) {
+      if (currentState) {
+        // Obiect detectat aproape
+        activateProximityMode();
+      } else {
+        // Obiectul s-a îndepărtat
+        deactivateProximityMode();
+      }
+      lastState = currentState;
     }
-    lastState = currentState;
   }
   
-  // Afișare informații pentru debugging
-  if (millis() % 500 == 0) {
-    Serial.print("Distanța: ");
+  // Actualizăm poziția servomotoarelor (mișcare lentă)
+  updateServoPositions();
+  
+  // Afișare informații pentru debugging (mai rar)
+  static unsigned long lastDebugTime = 0;
+  if (currentTime - lastDebugTime >= 2000) { // La fiecare 2 secunde
+    Serial.print("Status - Ultima distanță: ");
     Serial.print(distance);
     Serial.print(" cm | Stare: ");
-    Serial.println(currentState ? "APROAPE" : "DEPARTE");
+    Serial.print(lastState ? "APROAPE" : "DEPARTE");
+    Serial.print(" | Servo1: ");
+    Serial.print(currentAngle1);
+    Serial.print("° | Servo2: ");
+    Serial.print(currentAngle2);
+    Serial.print("° | Timp până la următoarea măsurare: ");
+    Serial.print((MEASUREMENT_INTERVAL - (currentTime - lastMeasurementTime)) / 1000);
+    Serial.println("s");
+    lastDebugTime = currentTime;
   }
   
-  delay(100);
+  delay(20); // Delay mai mic pentru mișcare mai fluidă
+}
+
+// =========================
+// FUNCȚII PENTRU MIȘCARE LENTĂ SERVOMOTOARE
+// =========================
+void updateServoPositions() {
+  bool moved = false;
+  
+  // Actualizăm servo1
+  if (currentAngle1 != targetAngle1) {
+    if (currentAngle1 < targetAngle1) {
+      currentAngle1 += min(SERVO_SPEED, targetAngle1 - currentAngle1);
+    } else {
+      currentAngle1 -= min(SERVO_SPEED, currentAngle1 - targetAngle1);
+    }
+    servo1.write(currentAngle1);
+    moved = true;
+  }
+  
+  // Actualizăm servo2
+  if (currentAngle2 != targetAngle2) {
+    if (currentAngle2 < targetAngle2) {
+      currentAngle2 += min(SERVO_SPEED, targetAngle2 - currentAngle2);
+    } else {
+      currentAngle2 -= min(SERVO_SPEED, currentAngle2 - targetAngle2);
+    }
+    servo2.write(currentAngle2);
+    moved = true;
+  }
+  
+  // Dacă s-a mișcat cel puțin un servo, așteptăm
+  if (moved) {
+    delay(SERVO_DELAY);
+  }
+}
+
+void moveServosToSlow(int angle1, int angle2) {
+  Serial.print("Setăm servomotoarele la: ");
+  Serial.print(angle1);
+  Serial.print("° și ");
+  Serial.print(angle2);
+  Serial.println("°");
+  
+  // Setăm pozițiile țintă
+  targetAngle1 = constrain(angle1, 0, 180);
+  targetAngle2 = constrain(angle2, 0, 180);
+}
+
+// Funcție pentru a mișca ambele servomotoare la același unghi
+void moveServosToSlow(int angle) {
+  moveServosToSlow(angle, angle);
+}
+
+// Funcție pentru a aștepta ca servomotoarele să ajungă la poziție
+void waitForServos() {
+  while (currentAngle1 != targetAngle1 || currentAngle2 != targetAngle2) {
+    updateServoPositions();
+    delay(1);
+  }
 }
 
 // =========================
@@ -153,26 +248,15 @@ float measureDistance() {
 }
 
 // =========================
-// FUNCȚII PWM - CONTROLUL SERVOMOTOARELOR
+// FUNCȚII PWM - CONTROLUL SERVOMOTOARELOR (ACTUALIZATE)
 // =========================
-void moveServosTo(int angle) {
-  Serial.print("Mutăm servomotoarele la: ");
-  Serial.print(angle);
-  Serial.println(" grade");
-  
-  // Mutăm ambele servomotoare la unghiul specificat
-  servo1.write(angle);
-  servo2.write(angle);
-}
-
 void activateProximityMode() {
   Serial.println("ACTIVARE: Obiect detectat aproape!");
   
-  // PWM: Rotim servomotoarele la 90 de grade
-  moveServosTo(90);
+  // PWM: Rotim servomotoarele la 45 de grade (lent)
+  moveServosToSlow(45);
   
   // Redăm primul fișier audio
-  delay(500); // Așteptăm ca servomotoarele să se miște
   dfPlayer.play(1); // Redă 001.mp3
   
   Serial.println("Redare: 001.mp3");
@@ -181,11 +265,10 @@ void activateProximityMode() {
 void deactivateProximityMode() {
   Serial.println("DEZACTIVARE: Obiectul s-a îndepărtat!");
   
-  // PWM: Rotim servomotoarele la -90 de grade (sau 270)
-  moveServosTo(270); // Echivalent cu -90 grade
+  // PWM: Rotim servomotoarele la 0 grade (lent)
+  moveServosToSlow(0);
   
   // Redăm al doilea fișier audio
-  delay(500); // Așteptăm ca servomotoarele să se miște
   dfPlayer.play(2); // Redă 002.mp3
   
   Serial.println("Redare: 002.mp3");
@@ -198,11 +281,20 @@ void printSystemInfo() {
   Serial.println("=========================");
   Serial.println("INFORMAȚII SISTEM:");
   Serial.println("- Senzor ultrasonic: Pin 2 (TRIG), Pin 3 (ECHO)");
-  Serial.println("- Servomotor 1: Pin 9 (PWM)");
-  Serial.println("- Servomotor 2: Pin 10 (PWM)");
-  Serial.println("- DFPlayer: Pin 7 (RX), Pin 8 (TX)");
+  Serial.println("- Servomotor 1: Pin 4 (PWM)");
+  Serial.println("- Servomotor 2: Pin 5 (PWM)");
+  Serial.println("- DFPlayer: Pin 6 (RX), Pin 7 (TX)");
   Serial.print("- Prag detecție: ");
   Serial.print(THRESHOLD_DISTANCE);
   Serial.println(" cm");
+  Serial.print("- Interval măsurare: ");
+  Serial.print(MEASUREMENT_INTERVAL / 1000);
+  Serial.println(" secunde");
+  Serial.print("- Viteza servo: ");
+  Serial.print(SERVO_SPEED);
+  Serial.println("°/pas");
+  Serial.print("- Delay servo: ");
+  Serial.print(SERVO_DELAY);
+  Serial.println("ms");
   Serial.println("=========================");
 }
